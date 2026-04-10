@@ -1,23 +1,29 @@
 import streamlit as st
 import pandas as pd
 from textblob import TextBlob
-
 import gdown
 import os
 import pickle
+import sklearn  # IMPORTANT for loading pipeline
+
+# ---------------- MODEL LOADING ----------------
 
 MODEL_PATH = "model.pkl"
 
+# Download model if not present
 if not os.path.exists(MODEL_PATH):
     url = "https://drive.google.com/uc?id=1eiqIV8JVMqWpSrddHeexvdyD2hnW6UGf"
     gdown.download(url, MODEL_PATH, quiet=False)
 
-if os.path.exists(MODEL_PATH):
+# Safe loading
+try:
     model = pickle.load(open(MODEL_PATH, "rb"))
-else:
-    st.error("Model failed to load.")
+except Exception as e:
+    st.error(f"Model loading failed: {e}")
     st.stop()
-    
+
+# ---------------- UI ----------------
+
 st.set_page_config(page_title="Fake Account Detector", layout="centered")
 
 st.title("🔍 Fake Account Detection System")
@@ -31,7 +37,7 @@ followers = st.number_input("Followers", min_value=0.0)
 following = st.number_input("Following", min_value=0.0)
 favourites = st.number_input("Favourites", min_value=0.0)
 
-# 🔹 Feature Engineering (MATCHES COLAB)
+# ---------------- FEATURE ENGINEERING ----------------
 
 def get_sentiment(text):
     return TextBlob(text).sentiment.polarity
@@ -42,21 +48,18 @@ def count_spam_words(text):
     text = text.lower()
     return sum(word in text for word in spam_words)
 
+# ---------------- PREDICTION ----------------
 
-# Prediction
 if st.button("Predict"):
 
-    # Clean text
     description_clean = bio.lower()
 
-    # Engineered features
     follower_friend_ratio = followers / (following + 1)
     engagement_score = favourites / (followers + 1)
     bio_length = len(bio)
     sentiment = get_sentiment(bio)
     spam_count = count_spam_words(bio)
 
-    # 🔥 IMPORTANT: Create DataFrame with EXACT column names
     input_data = pd.DataFrame([{
         'description_clean': description_clean,
         'followers_scaled': followers,
@@ -69,43 +72,46 @@ if st.button("Predict"):
         'spam_count': spam_count
     }])
 
-    # Prediction
-    prediction = model.predict(input_data)[0]
-
     try:
-        prob = model.predict_proba(input_data)[0][prediction]
-        confidence = round(prob * 100, 2)
-    except:
-        confidence = 75.0
+        prediction = model.predict(input_data)[0]
 
-    st.subheader("Result")
+        try:
+            prob = model.predict_proba(input_data)[0][prediction]
+            confidence = round(prob * 100, 2)
+        except:
+            confidence = 75.0
 
-    if prediction == 1:
-        st.error("🚨 Fake Account Detected")
-    else:
-        st.success("✅ Real Account")
+        st.subheader("Result")
 
-    st.write(f"Confidence: {confidence}%")
+        if prediction == 1:
+            st.error("🚨 Fake Account Detected")
+        else:
+            st.success("✅ Real Account")
 
-    # Explanation
-    st.subheader("Why this prediction?")
+        st.write(f"Confidence: {confidence}%")
 
-    reasons = []
+        # Explanation
+        st.subheader("Why this prediction?")
 
-    if follower_friend_ratio < 0.3:
-        reasons.append("Low follower-following ratio")
+        reasons = []
 
-    if following > followers * 2:
-        reasons.append("Following too many accounts")
+        if follower_friend_ratio < 0.3:
+            reasons.append("Low follower-following ratio")
 
-    if len(bio.strip()) == 0:
-        reasons.append("Empty bio")
+        if following > followers * 2:
+            reasons.append("Following too many accounts")
 
-    if spam_count > 0:
-        reasons.append("Contains spam-like words")
+        if len(bio.strip()) == 0:
+            reasons.append("Empty bio")
 
-    if not reasons:
-        reasons.append("Profile looks normal")
+        if spam_count > 0:
+            reasons.append("Contains spam-like words")
 
-    for r in reasons:
-        st.write(f"• {r}")
+        if not reasons:
+            reasons.append("Profile looks normal")
+
+        for r in reasons:
+            st.write(f"• {r}")
+
+    except Exception as e:
+        st.error(f"Prediction failed: {e}")
