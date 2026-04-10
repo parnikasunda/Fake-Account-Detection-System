@@ -1,11 +1,23 @@
 import streamlit as st
-import pickle
 import pandas as pd
 from textblob import TextBlob
 
-# Load trained pipeline model
-model = pickle.load(open("model.pkl", "rb"))
+import gdown
+import os
+import pickle
 
+MODEL_PATH = "model.pkl"
+
+if not os.path.exists(MODEL_PATH):
+    url = "https://drive.google.com/uc?id=1eiqIV8JVMqWpSrddHeexvdyD2hnW6UGf"
+    gdown.download(url, MODEL_PATH, quiet=False)
+
+if os.path.exists(MODEL_PATH):
+    model = pickle.load(open(MODEL_PATH, "rb"))
+else:
+    st.error("Model failed to load.")
+    st.stop()
+    
 st.set_page_config(page_title="Fake Account Detector", layout="centered")
 
 st.title("🔍 Fake Account Detection System")
